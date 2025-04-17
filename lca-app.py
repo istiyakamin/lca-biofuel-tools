@@ -3,313 +3,329 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import seaborn as sns
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-# Set up the Streamlit page configuration
-st.set_page_config(page_title="LCA Tool for Biofuel Production", layout="wide")
+# Page configuration
+st.set_page_config(page_title="LCA Tool for WCO Biofuel (1 MJ FU)", layout="wide")
 
-# --------------------------------------------------
-# Sidebar Navigation
-# --------------------------------------------------
+# Sidebar navigation with hierarchical structure
 st.sidebar.title("Navigation")
-section = st.sidebar.radio("Go to", 
-                           ["Introduction", "Input Data", "LCA Calculations", "Visualizations", "Reporting"])
-
-# --------------------------------------------------
-# Session State Initialization
-# --------------------------------------------------
-if "inputs" not in st.session_state:
-    st.session_state.inputs = {
-         "waste_volume": 1000.0,                   # in liters
-         "collection_distance": 10.0,              # in km
-         "collection_frequency": 2,                # times per day
-         "conversion_efficiency": 80.0,            # in percentage
-         "processing_energy_consumption": 0.5,     # kWh per liter
-         "emission_factor_collection": 0.3,        # kg CO2 per km
-         "emission_factor_processing": 0.4,        # kg CO2 per kWh
-         "emission_factor_distribution": 0.2       # kg CO2 per km
-    }
-
-# --------------------------------------------------
-# Placeholder for External API Integration
-# --------------------------------------------------
-@st.cache_data
-def fetch_external_emission_factors(region="default"):
-    """
-    This function simulates fetching regional emission factors from an external API.
-    In a production setting, replace the below dummy values with an API call.
-    """
-    # Dummy external data
-    return {
-        "emission_factor_collection": 0.3,
-        "emission_factor_processing": 0.4,
-        "emission_factor_distribution": 0.2
-    }
-
-# --------------------------------------------------
-# LCA Calculation Function with Caching
-# --------------------------------------------------
-@st.cache_data
-def calculate_lca(waste_volume, collection_distance, collection_frequency,
-                  conversion_efficiency, processing_energy_consumption,
-                  emission_factor_collection, emission_factor_processing, emission_factor_distribution):
-    """
-    Performs the Life Cycle Assessment calculations based on user inputs.
-    
-    Calculation logic (simplified):
-      - Collection emissions: scales with waste volume, distance, and frequency.
-      - Processing emissions: based on energy consumption and conversion efficiency.
-      - Distribution emissions: similar to collection.
-    """
-    collection_emissions = (waste_volume / 10) * collection_distance * collection_frequency * emission_factor_collection
-    processing_emissions = (waste_volume * processing_energy_consumption) * emission_factor_processing * (100 / conversion_efficiency)
-    distribution_emissions = (waste_volume / 10) * collection_distance * emission_factor_distribution
-    total_emissions = collection_emissions + processing_emissions + distribution_emissions
-    net_emissions = total_emissions  # Offsets can be integrated here in the future.
-    return {
-         "Collection Emissions (kg CO2)": collection_emissions,
-         "Processing Emissions (kg CO2)": processing_emissions,
-         "Distribution Emissions (kg CO2)": distribution_emissions,
-         "Total Emissions (kg CO2)": total_emissions,
-         "Net Emissions (kg CO2)": net_emissions
-    }
-
-# --------------------------------------------------
-# Section: Introduction
-# --------------------------------------------------
-if section == "Introduction":
-    st.title("LCA Tool for Biofuel Production from Waste Cooking Oil")
-    st.markdown("### Overview")
-    st.write(
-        """
-        This innovative online tool is designed for environmental engineers, sustainability consultants,
-        academic researchers, policymakers, and non-specialists. It enables users to evaluate the environmental
-        impact of biofuel production from waste cooking oil through a comprehensive life cycle assessment (LCA).
-        The tool features:
-        
-        - **User-Friendly Input:** Use intuitive widgets to enter data.
-        - **Real-Time Calculations:** Dynamic simulation of emissions and energy flows.
-        - **Interactive Visualizations:** Sankey diagrams, bar charts, and pie charts.
-        - **Detailed Reporting:** Generate exportable CSV (and in future PDF) reports.
-        """
-    )
-    st.markdown("### User Requirements & Personas")
-    st.markdown(
-        """
-        **Target Audience:**
-        - Environmental Engineers
-        - Sustainability Consultants
-        - Academic Researchers
-        - Policymakers
-        - Community Stakeholders
-        
-        **Key User Needs:**
-        - **Ease-of-Use:** Step-by-step guidance with clear input instructions.
-        - **Real-Time Feedback:** Immediate update of calculations and visualizations.
-        - **Detailed Reporting:** Exportable reports summarizing key LCA metrics.
-        - **Accessibility:** Mobile responsive and accessible interface.
-        """
-    )
-    st.markdown("### Future Enhancements")
-    st.markdown(
-        """
-        Future versions may include:
-        - Integration with machine learning models for predictive insights.
-        - Additional environmental impact metrics (e.g., water usage, land footprint).
-        - Extended API support for real-time regulatory data.
-        - Enhanced multi-user collaboration and secure data management.
-        """
-    )
-
-# --------------------------------------------------
-# Section: Input Data
-# --------------------------------------------------
-elif section == "Input Data":
-    st.title("Input Data & External Data Integration")
-    st.markdown("Enter the parameters needed for the LCA analysis using the input widgets below.")
-
-    # Two-column layout for better organization
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Waste & Collection Data")
-        st.session_state.inputs["waste_volume"] = st.number_input(
-            "Waste Oil Volume (liters)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["waste_volume"], 
-            step=100.0
-        )
-        st.session_state.inputs["collection_distance"] = st.number_input(
-            "Average Collection Distance (km)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["collection_distance"], 
-            step=1.0
-        )
-        st.session_state.inputs["collection_frequency"] = st.number_input(
-            "Collection Frequency (times per day)", 
-            min_value=0, 
-            value=st.session_state.inputs["collection_frequency"], 
-            step=1
-        )
-    with col2:
-        st.subheader("Processing & Emission Factors")
-        st.session_state.inputs["conversion_efficiency"] = st.slider(
-            "Conversion Efficiency (%)", 
-            min_value=0.0, 
-            max_value=100.0, 
-            value=st.session_state.inputs["conversion_efficiency"]
-        )
-        st.session_state.inputs["processing_energy_consumption"] = st.number_input(
-            "Processing Energy Consumption (kWh per liter)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["processing_energy_consumption"], 
-            step=0.1
-        )
-        # Option to fetch external emission factors
-        if st.button("Fetch Regional Emission Factors"):
-            external_factors = fetch_external_emission_factors()
-            st.session_state.inputs["emission_factor_collection"] = external_factors["emission_factor_collection"]
-            st.session_state.inputs["emission_factor_processing"] = external_factors["emission_factor_processing"]
-            st.session_state.inputs["emission_factor_distribution"] = external_factors["emission_factor_distribution"]
-            st.success("Emission factors updated from external data source.")
-        st.session_state.inputs["emission_factor_collection"] = st.number_input(
-            "Emission Factor for Collection (kg CO2 per km)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["emission_factor_collection"], 
-            step=0.05
-        )
-        st.session_state.inputs["emission_factor_processing"] = st.number_input(
-            "Emission Factor for Processing (kg CO2 per kWh)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["emission_factor_processing"], 
-            step=0.05
-        )
-        st.session_state.inputs["emission_factor_distribution"] = st.number_input(
-            "Emission Factor for Distribution (kg CO2 per km)", 
-            min_value=0.0, 
-            value=st.session_state.inputs["emission_factor_distribution"], 
-            step=0.05
-        )
-    st.markdown("_(Note: Future releases will include file uploaders for historical data and advanced API integrations.)_")
-
-# --------------------------------------------------
-# Section: LCA Calculations
-# --------------------------------------------------
-elif section == "LCA Calculations":
-    st.title("Life Cycle Assessment Calculations")
-    inputs = st.session_state.inputs
-    results = calculate_lca(
-         waste_volume=inputs["waste_volume"],
-         collection_distance=inputs["collection_distance"],
-         collection_frequency=inputs["collection_frequency"],
-         conversion_efficiency=inputs["conversion_efficiency"],
-         processing_energy_consumption=inputs["processing_energy_consumption"],
-         emission_factor_collection=inputs["emission_factor_collection"],
-         emission_factor_processing=inputs["emission_factor_processing"],
-         emission_factor_distribution=inputs["emission_factor_distribution"]
-    )
-    st.markdown("### Calculated LCA Metrics")
-    for key, value in results.items():
-         st.write(f"**{key}:** {value:.2f} kg CO2")
-    st.markdown("These calculations update in real time as you adjust the input parameters.")
-
-# --------------------------------------------------
-# Section: Interactive Visualizations
-# --------------------------------------------------
-elif section == "Visualizations":
-    st.title("Interactive Visualizations")
-    inputs = st.session_state.inputs
-    results = calculate_lca(
-         waste_volume=inputs["waste_volume"],
-         collection_distance=inputs["collection_distance"],
-         collection_frequency=inputs["collection_frequency"],
-         conversion_efficiency=inputs["conversion_efficiency"],
-         processing_energy_consumption=inputs["processing_energy_consumption"],
-         emission_factor_collection=inputs["emission_factor_collection"],
-         emission_factor_processing=inputs["emission_factor_processing"],
-         emission_factor_distribution=inputs["emission_factor_distribution"]
-    )
-    
-    # Bar Chart: Emissions by Stage
-    df_bar = pd.DataFrame({
-         "Stage": ["Collection", "Processing", "Distribution"],
-         "Emissions (kg CO2)": [
-             results["Collection Emissions (kg CO2)"],
-             results["Processing Emissions (kg CO2)"],
-             results["Distribution Emissions (kg CO2)"]
-         ]
-    })
-    fig_bar = px.bar(df_bar, x="Stage", y="Emissions (kg CO2)", 
-                     title="Emissions by Life Cycle Stage", text_auto=True)
-    st.plotly_chart(fig_bar, use_container_width=True)
-    
-    # Sankey Diagram: Emissions Flow
-    labels = ["Collection", "Processing", "Distribution", "Total Emissions"]
-    node = dict(label=labels, pad=15, thickness=20)
-    link = dict(
-         source=[0, 1, 2],
-         target=[1, 2, 3],
-         value=[
-             results["Collection Emissions (kg CO2)"],
-             results["Processing Emissions (kg CO2)"],
-             results["Distribution Emissions (kg CO2)"]
-         ]
-    )
-    fig_sankey = go.Figure(go.Sankey(node=node, link=link))
-    fig_sankey.update_layout(title_text="Sankey Diagram of Emissions Flow", font_size=10)
-    st.plotly_chart(fig_sankey, use_container_width=True)
-    
-    # Pie Chart: Emission Breakdown
-    fig_pie = px.pie(df_bar, names="Stage", values="Emissions (kg CO2)", title="Emission Breakdown")
-    st.plotly_chart(fig_pie, use_container_width=True)
-    
-    st.markdown("All visualizations update dynamically as you modify the inputs.")
-
-# --------------------------------------------------
-# Section: Reporting & Exporting
-# --------------------------------------------------
-elif section == "Reporting":
-    st.title("Reporting & Exporting Results")
-    inputs = st.session_state.inputs
-    results = calculate_lca(
-         waste_volume=inputs["waste_volume"],
-         collection_distance=inputs["collection_distance"],
-         collection_frequency=inputs["collection_frequency"],
-         conversion_efficiency=inputs["conversion_efficiency"],
-         processing_energy_consumption=inputs["processing_energy_consumption"],
-         emission_factor_collection=inputs["emission_factor_collection"],
-         emission_factor_processing=inputs["emission_factor_processing"],
-         emission_factor_distribution=inputs["emission_factor_distribution"]
-    )
-    # Create a DataFrame for reporting
-    df_results = pd.DataFrame(list(results.items()), columns=["LCA Metric", "Value (kg CO2)"])
-    st.dataframe(df_results)
-    
-    # CSV Download Button for the report
-    csv = df_results.to_csv(index=False).encode('utf-8')
-    st.download_button(
-         label="Download Report as CSV",
-         data=csv,
-         file_name="lca_report.csv",
-         mime="text/csv"
-    )
-    
-    st.markdown("### Future Reporting Enhancements")
-    st.markdown(
-        """
-        Future updates may include:
-        - PDF report generation with detailed insights.
-        - Additional visual export options.
-        - Integration with regulatory data sources.
-        """
-    )
-
-# --------------------------------------------------
-# Footer: Security & Scalability Note
-# --------------------------------------------------
-st.markdown("---")
-st.markdown(
-    """
-    **Security & Scalability Note:**  
-    This tool leverages HTTPS and Streamlit’s session state for secure data handling. Future versions will include 
-    robust user authentication, data encryption, and cloud-based scaling strategies.
-    """
+main_menu = st.sidebar.radio(
+    "Main Menu", 
+    [
+        "Introduction", 
+        "Inventory Inputs", 
+        "LCA Calculations", 
+        "Detailed Analysis", 
+        "Results & Comparison"
+    ]
 )
+
+# Default emission factors and inventory initialization
+def default_factors():
+    return {
+        'wco_collection_ef': 0.3,       # kg CO2 per km
+        'methanol_ef': 1.5,            # kg CO2 per liter
+        'koh_ef': 2.0,                 # kg CO2 per kg
+        'energy_ef': 0.5,              # kg CO2 per kWh
+        'electricity_ef': 0.6,         # g CO2-eq per MJ of electricity
+        'wastewater_treat_ef': 0.2,    # kg CO2 per L
+        'glycerol_disposal_ef': 0.1    # kg CO2 per kg
+    }
+
+if 'inv' not in st.session_state:
+    factors = default_factors()
+    st.session_state.inv = {
+        # Functional unit: 1 MJ
+        'fu_mj': 1.0,
+        # Stage 1 inputs
+        'wco_volume_l': 30.0,
+        'collection_distance_km': 24.6,
+        'methanol_l': 8.54,
+        'koh_kg': 0.45,
+        # Stage 2 inputs
+        'reaction_energy_mj': 0.06 * 3.6,  # converting kWh to MJ if needed
+        'purification_water_l': 27.0,
+        'drying_energy_mj': 1.0 * 3.6,
+        # Stage 3 inputs
+        'distribution_distance_km': 223.0,
+        'load_capacity_l': 200.0,
+        # End-of-life inputs
+        'glycerol_kg': 5.0,
+        'wastewater_l': 54.0,
+        # Emission factors
+        **factors
+    }
+inv = st.session_state.inv
+
+# Define df_radar globally to avoid NameError
+df_radar = pd.DataFrame({
+    "Category": ["CC", "HT", "FD", "PMF", "POF"],
+    "Biofuel Diesel": [934.95, 783.93, 671.66, 5.06, 8.97],
+    "Fossil Diesel": [1000, 900, 800, 6, 10]
+})
+
+# Ensure metrics is calculated before any section that uses it
+# Compute stage emissions per 1 MJ FU
+stage1 = (inv['collection_distance_km'] * inv['wco_collection_ef']) + (inv['methanol_l'] * inv['methanol_ef']) + (inv['koh_kg'] * inv['koh_ef'])
+stage2 = (inv['reaction_energy_mj'] * inv['energy_ef']) + (inv['purification_water_l'] * inv['wastewater_treat_ef']) + (inv['drying_energy_mj'] * inv['energy_ef'])
+stage3 = (inv['distribution_distance_km'] * inv['wco_collection_ef']) / inv['load_capacity_l']
+stage5 = (inv['glycerol_kg'] * inv['glycerol_disposal_ef']) + (inv['wastewater_l'] * inv['wastewater_treat_ef'])
+total = stage1 + stage2 + stage3 + stage5
+metrics = {
+    'Stage 1 Acquisition': stage1,
+    'Stage 2 Production': stage2,
+    'Stage 3 Distribution': stage3,
+    'Stage 5 End-of-Life': stage5,
+    'Total': total
+}
+
+# Sections implementation
+if main_menu == "Introduction":
+    st.title("LCA Tool: Biofuel from Waste Cooking Oil (WCO)")
+    st.markdown("**Goal:** Evaluate environmental impacts of producing & using WCO biofuel in Malaysia vs diesel (Cradle-to-Grave, FU=1 MJ)")
+    st.markdown("**System Boundary:** Raw acquisition → Production → Distribution → Use Phase → End-of-Life")
+    st.markdown("**Functional Unit:** 1 MJ of biofuel")
+    # System boundary diagram
+    st.image("system_boundary.png", caption="System Boundary Diagram", use_column_width=True)
+
+elif main_menu == "Inventory Inputs":
+    st.title("Inventory Data Inputs")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("Stage 1: Raw Material Acquisition")
+        inv['wco_volume_l'] = st.number_input("WCO Volume (L)", value=inv['wco_volume_l'], step=1.0)
+        inv['collection_distance_km'] = st.number_input("Collection Distance (km)", value=inv['collection_distance_km'], step=1.0)
+        inv['methanol_l'] = st.number_input("Methanol Usage (L)", value=inv['methanol_l'], step=0.1)
+        inv['koh_kg'] = st.number_input("KOH Catalyst (kg)", value=inv['koh_kg'], step=0.01)
+    with c2:
+        st.subheader("Stage 2: Production & Purification")
+        inv['reaction_energy_mj'] = st.number_input("Reaction Energy (MJ)", value=inv['reaction_energy_mj'], step=0.1)
+        inv['purification_water_l'] = st.number_input("Water for Washing (L)", value=inv['purification_water_l'], step=1.0)
+        inv['drying_energy_mj'] = st.number_input("Drying Energy (MJ)", value=inv['drying_energy_mj'], step=0.1)
+    st.subheader("Stage 3: Distribution")
+    inv['distribution_distance_km'] = st.number_input("Distribution Distance (km)", value=inv['distribution_distance_km'], step=1.0)
+    inv['load_capacity_l'] = st.number_input("Load Capacity (L)", value=inv['load_capacity_l'], step=1.0)
+    st.subheader("End-of-Life")
+    inv['glycerol_kg'] = st.number_input("Glycerol By-product (kg)", value=inv['glycerol_kg'], step=0.1)
+    inv['wastewater_l'] = st.number_input("Wastewater (L)", value=inv['wastewater_l'], step=1.0)
+    st.subheader("Emission Factors")
+    for ef in ['wco_collection_ef', 'methanol_ef', 'koh_ef', 'energy_ef', 'electricity_ef', 'wastewater_treat_ef', 'glycerol_disposal_ef']:
+        inv[ef] = st.number_input(f"{ef.replace('_', ' ').title()}", value=inv[ef], step=0.01)
+
+elif main_menu in ("LCA Calculations", "Detailed Analysis"):
+    st.title("LCA Calculations & Stage Emissions")
+    for k, v in metrics.items():
+        st.write(f"**{k}:** {v:.4f} kg CO2")
+    if main_menu == "Detailed Analysis":
+        st.markdown("---")
+        st.header("Interpretation & Analysis")
+        for i, (k, v) in enumerate(metrics.items()):
+            if k != 'Total':
+                st.markdown(f"- **{k}** contributes {v/total*100:.1f}% of total emissions.")
+        st.markdown("**Opportunities for Impact Reduction:**")
+        st.markdown("- Improve conversion efficiency.")
+        st.markdown("- Switch to renewable electricity.")
+        st.markdown("- Optimize distribution logistics.")
+
+elif main_menu == "Results & Comparison":
+    st.title("Results & Comparison")
+
+
+        
+    # Overview Section
+    st.header("Overview: Biofuel Diesel vs. Fossil Diesel")
+
+    # High-level summary
+    st.subheader("Total Impact Summary")
+    total_biofuel = metrics['Total']
+    total_fossil = 2897.2125  # Example total for fossil diesel
+    summary_data = {
+        "Metric": ["Total Impact (kg CO2)", "Water Depletion (m³)", "CO2 Emissions (kg)"],
+        "Biofuel Diesel": [f"{total_biofuel:.2f}", "8.8", "2317.77"],
+        "Fossil Diesel": [f"{total_fossil:.2f}", "11", "2897.21"]
+    }
+    df_summary = pd.DataFrame(summary_data)
+    st.table(df_summary)
+
+    # Pie chart for lifecycle stages
+    st.subheader("Lifecycle Stage Contributions")
+    labels = [k for k in metrics if k != 'Total']
+    values = [metrics[k] for k in labels]
+    fig_pie = px.pie(
+        names=labels, values=values, title="Biofuel Diesel Lifecycle Stage Contributions"
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+
+    # Adding detailed data table for better clarity
+    st.subheader("Detailed Impact Data")
+
+    # Midpoint and Endpoint categories
+    midpoint_endpoint_data = {
+        "Midpoint Impact Categories": [
+            "Climate change", "Ozone depletion", "Fossil fuel depletion", "Human toxicity", "Ionizing radiation", "Mineral resource depletion", "Particulate matter formation", "Photochemical oxidant formation", "Water depletion"
+        ],
+        "Abbreviation": ["CC", "OD", "FD", "HT", "IR", "MRD", "PMF", "POF", "WD"],
+        "Units": ["kg CO2 eq", "kg CFC-11 eq", "kg oil eq", "kg 1,4-DB eq", "kg U235 eq", "kg Fe eq", "kg PM-2.5 eq", "kg NOx eq", "m³"],
+        "Endpoint Impact Categories": [
+            "Human health", "Ecosystem diversity", "Resource availability", "", "", "", "", "", ""
+        ],
+        "Abbreviation (Endpoint)": ["HH", "ED", "RA", "", "", "", "", "", ""],
+        "Units (Endpoint)": ["DALY", "Species year", "$", "", "", "", "", "", ""]
+    }
+    df_midpoint_endpoint = pd.DataFrame(midpoint_endpoint_data)
+    st.table(df_midpoint_endpoint)
+
+    # Detailed impact data
+    impact_data = {
+        "Impact Category": ["CC (kg CO2 eq)", "OD (kg CFC-11 eq)", "IR (kg U235 eq)", "PMF (kg PM-2.5 eq)", "POF (kg NOx eq)", "HT (kg 1,4-DB eq)", "WD (m³)", "MD (kg Fe eq)", "FD (kg oil eq)"],
+        "Collection": [175, 0, 0.84, 0.28, 0.74, 45.39, 1.58, 0.45, 40.95],
+        "Pretreatment": [158.87, 0, 3.28, 0.35, 0.48, 70.08, 0.66, 1.62, 32.84],
+        "Transesterification": [934.95, 0, 8.19, 2.19, 3.15, 332.36, 1.77, 8.74, 280.26],
+        "Transportation": [114, 0, 0.03, 0.05, 1.45, 3.74, 3.02, 0.07, 37.35],
+        "Use Phase": [934.95, 0, 8.19, 2.19, 3.15, 332.36, 1.77, 8.74, 280.26],
+        "Biofuel Diesel": [2317.77, 0, 20.53, 5.06, 8.97, 783.93, 8.8, 19.62, 671.66],
+        "Fossil Diesel": [2897.2125, 0, 25.6625, 6.325, 11.2125, 979.9125, 11, 24.525, 839.575]
+    }
+    df_impact = pd.DataFrame(impact_data)
+    st.table(df_impact)
+
+    # Life cycle stage data
+    lifecycle_data = {
+        "Life Cycle Stage": ["Raw Material Acquisition", "Production", "Distribution", "Use Phase", "End-of-Life", "Total"],
+        "Energy Use (MJ/MJ)": [0.01, 0.07, 0.0205, 0.9, 0.012, 1.0025],
+        "GWP (g CO2-eq/MJ)": [5.6, 22, 8.3, 70, 4.2, 110],
+        "NOx (mg/MJ)": [10, 20, 15, 50, 5, 100],
+        "PM (mg/MJ)": [2, 5, 3, 10, 1, 21],
+        "HC (mg/MJ)": [3, 8, 5, 15, 2, 33],
+        "Water Pollution (liters)": [0, 1.46, 0, 0, 0.5, 1.96],
+        "Solid Waste (g)": [0, 5, 0, 0, 2, 7]
+    }
+    df_lifecycle = pd.DataFrame(lifecycle_data)
+    st.table(df_lifecycle)
+
+    # Heatmap for impact categories
+    st.subheader("Impact Categories Heatmap")
+    data_heatmap = {
+        "Impact Category": [
+            "CC", "OD", "IR", "PMF", "POF", "HT", "WD", "MRD", "FD"
+        ],
+        "Collection": [175, 0, 0.84, 0.28, 0.74, 45.39, 1.58, 0.45, 40.95],
+        "Pretreatment": [158.87, 0, 3.28, 0.35, 0.48, 70.08, 0.66, 1.62, 32.84],
+        "Transesterification": [934.95, 0, 8.19, 2.19, 3.15, 332.36, 1.77, 8.74, 280.26],
+        "Transportation": [114, 0, 0.03, 0.05, 1.45, 3.74, 3.02, 0.07, 37.35],
+        "Use Phase": [934.95, 0, 8.19, 2.19, 3.15, 332.36, 1.77, 8.74, 280.26],
+        "Biofuel Diesel": [2317.77, 0, 20.53, 5.06, 8.97, 783.93, 8.8, 19.62, 671.66],
+        "Fossil Diesel": [2897.2125, 0, 25.6625, 6.325, 11.2125, 979.9125, 11, 24.525, 839.575]
+    }
+    df_heatmap = pd.DataFrame(data_heatmap).set_index("Impact Category")
+    fig_heatmap = sns.heatmap(df_heatmap, annot=True, cmap="coolwarm")
+    st.pyplot(fig_heatmap.figure)
+
+    # Lifecycle Stages Section
+    st.header("Lifecycle Stages: Biofuel Diesel vs. Fossil Diesel")
+
+    # Bar charts for lifecycle stages
+    st.subheader("Impact Comparison by Lifecycle Stage")
+    df_stage = pd.DataFrame({
+        "Stage": ["Collection", "Pretreatment", "Transesterification", "Transportation", "Use Phase"],
+        "Biofuel Diesel": [175, 158.87, 934.95, 114, 934.95],
+        "Fossil Diesel": [200, 180, 1000, 120, 1000]
+    })
+    fig_bar = px.bar(
+        df_stage, x="Stage", y=["Biofuel Diesel", "Fossil Diesel"],
+        barmode="group", title="Lifecycle Stage Comparison"
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Line graph for cumulative impact
+    st.subheader("Cumulative Impact Across Stages")
+    df_cumulative = df_stage.copy()
+    df_cumulative["Biofuel Diesel"] = df_cumulative["Biofuel Diesel"].cumsum()
+    df_cumulative["Fossil Diesel"] = df_cumulative["Fossil Diesel"].cumsum()
+    fig_line = px.line(
+        df_cumulative, x="Stage", y=["Biofuel Diesel", "Fossil Diesel"],
+        title="Cumulative Impact Across Stages"
+    )
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    # Treemaps for most impactful stages
+    st.subheader("Most Impactful Stages by Category")
+    df_treemap = pd.DataFrame({
+        "Category": ["CC", "HT", "FD"],
+        "Stage": ["Transesterification", "Use Phase", "Collection"],
+        "Impact": [934.95, 934.95, 175]
+    })
+    fig_treemap = px.treemap(
+        df_treemap, path=["Category", "Stage"], values="Impact",
+        title="Most Impactful Stages by Category"
+    )
+    st.plotly_chart(fig_treemap, use_container_width=True)
+
+    # Impact Categories Section
+    st.header("Impact Categories: Biofuel Diesel vs. Fossil Diesel")
+
+    # Ensure the 'Reduction' column is added to the DataFrame before using it in the chart
+    if 'Reduction' not in df_radar.columns:
+        df_radar["Reduction"] = (
+            (df_radar["Fossil Diesel"] - df_radar["Biofuel Diesel"]) / df_radar["Fossil Diesel"] * 100
+        )
+
+    # Radar chart for all categories
+    st.subheader("Radar Chart: Impact Categories")
+    fig_radar = px.line_polar(
+        df_radar, r="Biofuel Diesel", theta="Category", line_close=True,
+        title="Radar Chart: Biofuel Diesel"
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
+
+    # Grouped bar charts for each category
+    st.subheader("Grouped Bar Charts: Impact Categories")
+    fig_grouped_bar = px.bar(
+        df_radar, x="Category", y=["Biofuel Diesel", "Fossil Diesel"],
+        barmode="group", title="Grouped Bar Charts"
+    )
+    st.plotly_chart(fig_grouped_bar, use_container_width=True)
+
+    # Percentage reduction charts
+    st.subheader("Percentage Reduction: Biofuel vs. Fossil Diesel")
+    fig_reduction = px.bar(
+        df_radar, x="Category", y="Reduction", title="Percentage Reduction"
+    )
+    st.plotly_chart(fig_reduction, use_container_width=True)
+
+    # Biofuel vs. Fossil Diesel Section
+    st.header("Biofuel Diesel vs. Fossil Diesel")
+
+    # Side-by-side bar charts
+    st.subheader("Side-by-Side Bar Charts")
+    fig_side_by_side = px.bar(
+        df_radar, x="Category", y=["Biofuel Diesel", "Fossil Diesel"],
+        barmode="group", title="Side-by-Side Bar Charts"
+    )
+    st.plotly_chart(fig_side_by_side, use_container_width=True)
+
+    # Line graphs for percentage reduction
+    st.subheader("Percentage Reduction Line Graph")
+    if 'Reduction' not in df_radar.columns:
+        df_radar["Reduction"] = (
+            (df_radar["Fossil Diesel"] - df_radar["Biofuel Diesel"]) / df_radar["Fossil Diesel"] * 100
+        )
+    fig_line_reduction = px.line(
+        df_radar, x="Category", y="Reduction",
+        title="Percentage Reduction Line Graph"
+    )
+    st.plotly_chart(fig_line_reduction, use_container_width=True)
+        
+
+    # Icon-based visuals for key metrics
+    st.subheader("Key Metrics")
+    st.markdown(
+        "- **Water Depletion:** Biofuel Diesel uses 8.8 m³ vs. Fossil Diesel 11 m³\n"
+        "- **CO2 Emissions:** Biofuel Diesel emits 2317.77 kg vs. Fossil Diesel 2897.21 kg"
+    )
+
+# Footer
+st.markdown("---")
+st.markdown("*LCA Tool for WCO Biofuel | FU = 1 MJ | Cradle-to-Grave*")
