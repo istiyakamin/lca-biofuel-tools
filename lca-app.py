@@ -88,7 +88,7 @@ if main_menu == "Introduction":
     st.markdown("**System Boundary:** Raw acquisition → Production → Distribution → Use Phase → End-of-Life")
     st.markdown("**Functional Unit:** 1 MJ of biofuel")
     # System boundary diagram
-    st.image("system_boundary.png", caption="System Boundary Diagram", use_column_width=True)
+    st.image("./path/to/system_boundary.png", caption="System Boundary Diagram", use_column_width=True)
 
 elif main_menu == "Inventory Inputs":
     st.title("Inventory Data Inputs")
